@@ -4,8 +4,8 @@ Lightweight tracker, not a spec. Check things off as they land.
 
 ## Now: Range references + aggregate functions
 
-- [ ] Tokenizer: recognize range syntax (`A1:B3`)
-- [ ] Helper: expand a range into the list of cell names it covers
+- [x] Tokenizer: recognize range syntax (`A1:B3`) (`Formula.GetTokens`, 16 unit tests)
+- [x] Helper: expand a range into the list of cell names it covers (`Formula.ExpandRange`, 10 unit tests)
 - [ ] Tokenizer/parser: recognize function calls `SUM(...)`, `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, `COUNT(...)`
 - [ ] `GetVariables()`: include every cell referenced via a range/function arg
 - [ ] `Evaluate()`: compute function calls over the expanded arguments

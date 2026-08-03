@@ -257,22 +257,26 @@ public class Formula
     /// </summary>
     /// <param name="formula"> A string representing an infix formula such as 1*B1/3.0. </param>
     /// <returns> The ordered list of tokens in the formula. </returns>
-    private static List<string> GetTokens(string formula)
+    internal static List<string> GetTokens(string formula)
     {
         List<string> results = [];
 
         string lpPattern = @"\(";
         string rpPattern = @"\)";
         string opPattern = @"[\+\-*/]";
+        string rangePattern = $"{VariableRegExPattern}:{VariableRegExPattern}";
         string doublePattern = @"(?: \d+\.\d* | \d*\.\d+ | \d+ ) (?: [eE][\+-]?\d+)?";
         string spacePattern = @"\s+";
 
-        // Overall pattern
+        // Overall pattern. rangePattern must come before VariableRegExPattern:
+        // alternation is first-match-wins at a given position (not longest-match),
+        // so "A1:B3" would otherwise match only "A1" and strand the rest.
         string pattern = string.Format(
-                                        "({0}) | ({1}) | ({2}) | ({3}) | ({4}) | ({5})",
+                                        "({0}) | ({1}) | ({2}) | ({3}) | ({4}) | ({5}) | ({6})",
                                         lpPattern,
                                         rpPattern,
                                         opPattern,
+                                        rangePattern,
                                         VariableRegExPattern,
                                         doublePattern,
                                         spacePattern);
@@ -287,6 +291,84 @@ public class Formula
         }
 
         return results;
+    }
+
+    /// <summary>
+    ///   <para>
+    ///     Given the two corner cell names of a range (e.g., "A1" and "C3"), returns
+    ///     every cell name in the rectangle they define. The two corners may be given
+    ///     in any order; the min/max of their rows and columns determines the rectangle.
+    ///   </para>
+    ///   <para>
+    ///     Both <paramref name="start"/> and <paramref name="end"/> are assumed to
+    ///     already be normalized (uppercase) valid cell names.
+    ///   </para>
+    /// </summary>
+    /// <param name="start"> One corner of the range, e.g. "A1". </param>
+    /// <param name="end"> The other corner of the range, e.g. "C3". </param>
+    /// <returns> Every cell name in the rectangle, in row-major order. </returns>
+    internal static IEnumerable<string> ExpandRange(string start, string end)
+    {
+        (int startCol, int startRow) = ParseCellReference(start);
+        (int endCol, int endRow) = ParseCellReference(end);
+
+        int minCol = Math.Min(startCol, endCol);
+        int maxCol = Math.Max(startCol, endCol);
+        int minRow = Math.Min(startRow, endRow);
+        int maxRow = Math.Max(startRow, endRow);
+
+        List<string> cells = new();
+        for (int row = minRow; row <= maxRow; row++)
+        {
+            for (int col = minCol; col <= maxCol; col++)
+            {
+                cells.Add(ColumnNumberToLetters(col) + row);
+            }
+        }
+
+        return cells;
+    }
+
+    /// <summary>
+    ///   Splits a cell name like "AA30" into its column number (AA = 27) and row number (30).
+    /// </summary>
+    private static (int Column, int Row) ParseCellReference(string cellName)
+    {
+        Match match = Regex.Match(cellName, @"^([A-Za-z]+)(\d+)$");
+        int column = ColumnLettersToNumber(match.Groups[1].Value);
+        int row = int.Parse(match.Groups[2].Value);
+        return (column, row);
+    }
+
+    /// <summary>
+    ///   Converts a column letter sequence (e.g. "A", "Z", "AA") to a 1-based column
+    ///   number (A=1, Z=26, AA=27), using bijective base-26 (there is no digit for zero).
+    /// </summary>
+    private static int ColumnLettersToNumber(string letters)
+    {
+        int number = 0;
+        foreach (char c in letters.ToUpper())
+        {
+            number = (number * 26) + (c - 'A' + 1);
+        }
+
+        return number;
+    }
+
+    /// <summary>
+    ///   Converts a 1-based column number back to its letter sequence (27 -> "AA").
+    /// </summary>
+    private static string ColumnNumberToLetters(int number)
+    {
+        string letters = string.Empty;
+        while (number > 0)
+        {
+            number--;
+            letters = (char)('A' + (number % 26)) + letters;
+            number /= 26;
+        }
+
+        return letters;
     }
 
     /// <summary>
