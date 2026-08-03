@@ -1,0 +1,13 @@
+# .NET build artifacts
+bin/
+obj/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+.DS_Store
+*.user
+
+# Local spreadsheet save files created while testing the GUI
+*.sprd
