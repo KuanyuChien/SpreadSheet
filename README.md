@@ -22,8 +22,11 @@ See [TODO.md](TODO.md) for the current work queue.
 
 Builds cleanly on .NET 8 (`dotnet build Spreadsheet/Spreadsheet.sln`).
 Currently supported: numbers, strings, and formulas with `+ - * /` and
-single-cell references in each cell; no ranges or built-in functions yet
-(see TODO).
+single-cell references in each cell. Range syntax (`A1:B3`) is now
+recognized by the tokenizer and can be expanded to its cell list
+(`Formula.ExpandRange`), but ranges aren't usable in a real formula yet —
+that needs function-call syntax (`SUM(...)`, etc.), which is next on the
+TODO.
 
 ## Running it
 
@@ -35,6 +38,10 @@ dotnet run --project GUI
 ```
 
 The GUI launches at `http://localhost:5168` (see `GUI/Properties/launchSettings.json`).
+
+If only a newer .NET SDK/runtime is installed (e.g. only .NET 9 while these
+projects target net8.0), `dotnet test` fails to launch testhost. Work around
+it without retargeting anything: `DOTNET_ROLL_FORWARD=LatestMajor dotnet test Spreadsheet.sln`.
 
 ## Notes
 
