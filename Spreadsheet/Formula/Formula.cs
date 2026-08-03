@@ -264,25 +264,36 @@ public class Formula
         string lpPattern = @"\(";
         string rpPattern = @"\)";
         string opPattern = @"[\+\-*/]";
+        string commaPattern = @",";
         string rangePattern = $"{VariableRegExPattern}:{VariableRegExPattern}";
+
+        // Function name keywords. The lookahead blocks a trailing letter OR
+        // digit, not just a letter -- otherwise a cell legitimately named
+        // e.g. "SUM1" would wrongly get chopped into "SUM" + "1" instead of
+        // tokenizing as one variable.
+        string functionNamePattern = @"(?:SUM|AVERAGE|MIN|MAX|COUNT)(?![A-Za-z0-9])";
         string doublePattern = @"(?: \d+\.\d* | \d*\.\d+ | \d+ ) (?: [eE][\+-]?\d+)?";
         string spacePattern = @"\s+";
 
         // Overall pattern. rangePattern must come before VariableRegExPattern:
         // alternation is first-match-wins at a given position (not longest-match),
         // so "A1:B3" would otherwise match only "A1" and strand the rest.
+        // IgnoreCase below lets functionNamePattern match any case without
+        // spelling out every letter-case combination by hand.
         string pattern = string.Format(
-                                        "({0}) | ({1}) | ({2}) | ({3}) | ({4}) | ({5}) | ({6})",
+                                        "({0}) | ({1}) | ({2}) | ({3}) | ({4}) | ({5}) | ({6}) | ({7}) | ({8})",
                                         lpPattern,
                                         rpPattern,
                                         opPattern,
+                                        commaPattern,
                                         rangePattern,
+                                        functionNamePattern,
                                         VariableRegExPattern,
                                         doublePattern,
                                         spacePattern);
 
         // Enumerate matching tokens that don't consist solely of white space.
-        foreach (string s in Regex.Split(formula, pattern, RegexOptions.IgnorePatternWhitespace))
+        foreach (string s in Regex.Split(formula, pattern, RegexOptions.IgnorePatternWhitespace | RegexOptions.IgnoreCase))
         {
             if (!Regex.IsMatch(s, @"^\s*$", RegexOptions.Singleline))
             {

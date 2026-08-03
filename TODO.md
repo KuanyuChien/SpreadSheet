@@ -6,7 +6,8 @@ Lightweight tracker, not a spec. Check things off as they land.
 
 - [x] Tokenizer: recognize range syntax (`A1:B3`) (`Formula.GetTokens`, 16 unit tests)
 - [x] Helper: expand a range into the list of cell names it covers (`Formula.ExpandRange`, 10 unit tests)
-- [ ] Tokenizer/parser: recognize function calls `SUM(...)`, `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, `COUNT(...)`
+- [x] Tokenizer: recognize function-name (`SUM`/`AVERAGE`/`MIN`/`MAX`/`COUNT`) and `,` tokens (`Formula.GetTokens`, 17 unit tests)
+- [ ] Grammar rules: constructor accepts/rejects full function calls -- `FUNCNAME "(" arg ("," arg)* ")"` where `arg := range | cell` (no bare numbers, no nested calls)
 - [ ] `GetVariables()`: include every cell referenced via a range/function arg
 - [ ] `Evaluate()`: compute function calls over the expanded arguments
 - [ ] `ToString()`: canonical form for ranges + function calls
