@@ -16,11 +16,8 @@
 // Co-Author: Hung Nguyen, Date: 9/22/2024, Course: CS 3500
 namespace CS3500.Formula;
 
-using System.Data;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 
 /// <summary>
 ///   <para>
@@ -93,6 +90,7 @@ public class Formula
         bool IsNumber = false;          // Bool to check if token is number
         int OpenParenthesesCount = 0;   // Total count of "("
         int CloseParenthesesCount = 0;  // Total count of ")"
+        bool insideFunctionCallArgs = false; // true while the current token is inside a FUNCNAME(...) argument list
         ToStringResult = "";
 
 
@@ -100,10 +98,10 @@ public class Formula
 
         // Check if formula follows one token rule (Rule 1)
         if (tokens.Count <= 0) { throw new FormulaFormatException("Formula have to have at least 1 token"); }
-        // Check if formula follows first token rule (Rule 5)
-        if (!IsVar(tokens[0]) && !Double.TryParse(tokens[0],out _) && tokens[0] != "(")
+        // Check if formula follows first token rule (Rule 5, extended to allow a function call to start a formula)
+        if (!IsVar(tokens[0]) && !Double.TryParse(tokens[0],out _) && tokens[0] != "(" && !IsFunctionName(tokens[0]))
         {
-            throw new FormulaFormatException("Formula can start with a number, variable or open parentheses");
+            throw new FormulaFormatException("Formula can start with a number, variable, function call, or open parentheses");
         }
         // Check if formula follows last token rule(Rule 6)
         if (IsOperator(tokens[tokens.Count-1]) || tokens[tokens.Count - 1] == "(")
@@ -119,43 +117,93 @@ public class Formula
             if (Double.TryParse(tokens[i], out double n)) { IsNumber = true; tokens[i] = n.ToString(); } else { IsNumber = false; }
             if (tokens[i] == "(") { OpenParenthesesCount++; } else if (tokens[i] == ")") { CloseParenthesesCount++; }
 
-            // Check if formula follows valid token rule (Rule 2)
-            if (tokens[i] != "(" && tokens[i] != ")" && !isOp && !IsNumber && !IsVar(tokens[i])) 
-            { 
-                throw new FormulaFormatException("All tokens in the formula must be valid"); 
+            bool isRange = IsRange(tokens[i]);
+            bool isFunctionName = IsFunctionName(tokens[i]);
+
+            // Check if formula follows valid token rule (Rule 2, extended: comma/range/function-name are recognized shapes too)
+            if (tokens[i] != "(" && tokens[i] != ")" && tokens[i] != "," && !isOp && !IsNumber && !IsVar(tokens[i]) && !isRange && !isFunctionName)
+            {
+                throw new FormulaFormatException("All tokens in the formula must be valid");
             }
             // Check if formula follows closing parentheses rule (Rule 3)
-            if (CloseParenthesesCount > OpenParenthesesCount) 
-            { 
-                throw new FormulaFormatException("There cannot be more close parentheses than open parentheses at any point in the formula"); 
+            if (CloseParenthesesCount > OpenParenthesesCount)
+            {
+                throw new FormulaFormatException("There cannot be more close parentheses than open parentheses at any point in the formula");
             }
-            
-            // Check if formula follows following rule equation (Rule 7)
-            if ( i > 0 && (tokens[i - 1] == "(" || IsOperator(tokens[i-1])) && (!IsVar(tokens[i]) && !IsNumber && tokens[i] != "(" )) 
-            { 
-                throw new FormulaFormatException("After an open parentheses, only a number, variable or another variable is allowed"); 
+
+            // Ranges and commas only make sense as arguments inside a function call
+            if ((isRange || tokens[i] == ",") && !insideFunctionCallArgs)
+            {
+                throw new FormulaFormatException("Ranges and commas are only valid inside a function call's arguments");
             }
+            // A function name must always start a function call
+            if (isFunctionName && (i + 1 >= tokens.Count || tokens[i + 1] != "("))
+            {
+                throw new FormulaFormatException("A function name must be immediately followed by '('");
+            }
+
+            if (insideFunctionCallArgs)
+            {
+                // Only a cell, a range, a comma, or the closing paren are valid inside a function call's arguments
+                if (!isRange && !IsVar(tokens[i]) && tokens[i] != "," && tokens[i] != ")")
+                {
+                    throw new FormulaFormatException("Function call arguments must be a cell or range, separated by commas");
+                }
+
+                bool previousStartsArgumentSlot = tokens[i - 1] == "(" || tokens[i - 1] == ",";
+                bool previousWasArgument = IsRange(tokens[i - 1]) || IsVar(tokens[i - 1]);
+
+                if (previousStartsArgumentSlot && (tokens[i] == "," || tokens[i] == ")"))
+                {
+                    throw new FormulaFormatException("Function call is missing an argument (empty, leading, or trailing comma)");
+                }
+
+                if (previousWasArgument && (isRange || IsVar(tokens[i])))
+                {
+                    throw new FormulaFormatException("Function call arguments must be separated by a comma");
+                }
+            }
+            else
+            {
+                // Check if formula follows following rule equation (Rule 7, extended to allow a function call after an open parentheses or operator)
+                if ( i > 0 && (tokens[i - 1] == "(" || IsOperator(tokens[i-1])) && (!IsVar(tokens[i]) && !IsNumber && tokens[i] != "(" && !isFunctionName))
+                {
+                    throw new FormulaFormatException("After an open parentheses or operator, only a number, variable, function call, or another open parentheses is allowed");
+                }
+            }
+
             //Check if formula follows extra following rule (Rule 8)
-            if ((PreviousIsNumber && tokens[i] != ")" && !isOp)||(i+1 < tokens.Count && tokens[i] == ")" && !IsOperator(tokens[i+1]) && tokens[i+1]!=")")) 
-            { 
-                throw new FormulaFormatException("After a number must be an operator or close parentheses"); 
-            } 
+            if ((PreviousIsNumber && tokens[i] != ")" && !isOp)||(i+1 < tokens.Count && tokens[i] == ")" && !IsOperator(tokens[i+1]) && tokens[i+1]!=")"))
+            {
+                throw new FormulaFormatException("After a number must be an operator or close parentheses");
+            }
             if(IsNumber) { PreviousIsNumber=true; } else { PreviousIsNumber = false; }
-            tokens[i] = tokens[i].ToUpper(); //Normalize every token that pass through the method, as directed by 
+
+            // Track whether we're currently scanning inside a function call's argument list
+            if (tokens[i] == "(" && i > 0 && IsFunctionName(tokens[i - 1]))
+            {
+                insideFunctionCallArgs = true;
+            }
+            else if (tokens[i] == ")" && insideFunctionCallArgs)
+            {
+                insideFunctionCallArgs = false;
+            }
+
+            tokens[i] = tokens[i].ToUpper(); //Normalize every token that pass through the method, as directed by
             ToStringResult += tokens[i];
         }
         // Check if formula follow balanced parentheses rule (Rule 4)
-        if (OpenParenthesesCount != CloseParenthesesCount) 
-        { 
-            throw new FormulaFormatException("Number of parentheses is uneven"); 
-        }   
+        if (OpenParenthesesCount != CloseParenthesesCount)
+        {
+            throw new FormulaFormatException("Number of parentheses is uneven");
+        }
     }
 
     /// <summary>
-    /// Helper method Return a boolean that is the result of a check if character is an operator or not
+    /// Reports whether the given token is one of the four operator symbols (+, -, *, /).
     /// </summary>
-    /// <param name="c"></param>
-    /// <returns></returns>
+    /// <param name="token"> The token to check. </param>
+    /// <returns> true if the token is an operator. </returns>
     private bool IsOperator(string token)
     {
         //Check if string token is any of these operators, return true if correct
@@ -181,9 +229,20 @@ public class Formula
     public ISet<string> GetVariables()
     {
         ISet<string> variables = new HashSet<string>();
-        foreach (string token in tokens) 
+        foreach (string token in tokens)
         {
-            if (IsVar(token) && !variables.Contains(token)) { variables.Add(token); }
+            if (IsVar(token))
+            {
+                variables.Add(token);
+            }
+            else if (IsRange(token))
+            {
+                string[] corners = token.Split(':');
+                foreach (string cell in ExpandRange(corners[0], corners[1]))
+                {
+                    variables.Add(cell);
+                }
+            }
         }
         return variables;
     }
@@ -234,6 +293,28 @@ public class Formula
         // notice the use of ^ and $ to denote that the entire string being matched is just the variable
         string standaloneVarPattern = $"^{VariableRegExPattern}$";
         return Regex.IsMatch(token, standaloneVarPattern);
+    }
+
+    /// <summary>
+    ///   Reports whether "token" is a range, e.g. "A1:B3".
+    /// </summary>
+    /// <param name="token"> A token that may be a range. </param>
+    /// <returns> true if the string is a well-formed range. </returns>
+    private static bool IsRange(string token)
+    {
+        string standaloneRangePattern = $"^{VariableRegExPattern}:{VariableRegExPattern}$";
+        return Regex.IsMatch(token, standaloneRangePattern);
+    }
+
+    /// <summary>
+    ///   Reports whether "token" is one of the recognized aggregate function names
+    ///   (SUM, AVERAGE, MIN, MAX, COUNT), case-insensitively.
+    /// </summary>
+    /// <param name="token"> A token that may be a function name. </param>
+    /// <returns> true if the string is a recognized function name. </returns>
+    private static bool IsFunctionName(string token)
+    {
+        return Regex.IsMatch(token, "^(?:SUM|AVERAGE|MIN|MAX|COUNT)$", RegexOptions.IgnoreCase);
     }
 
     /// <summary>
@@ -471,8 +552,9 @@ public class Formula
         Stack<string> OperatorStack = new Stack<string> ();
         double n = 0;
         bool DividedByZero = false;
-        foreach (string token in tokens) 
+        for (int i = 0; i < tokens.Count; i++)
         {
+            string token = tokens[i];
             if (DividedByZero) { return new FormulaError("Divided by zero"); }
             if (token == "(")                   // Check if token is (
             {
@@ -492,24 +574,20 @@ public class Formula
                 }
                 continue;
             }
-
+            else if (IsFunctionName(token))
+            {
+                // tokens[i+1] is guaranteed to be "(" and the call to have at least one
+                // argument, by the constructor's grammar validation.
+                object functionResult = EvaluateFunctionCall(token, i + 2, out int closeParenIndex, lookup);
+                if (functionResult is FormulaError) { return functionResult; }
+                DividedByZero = PushOperand(ValueStack, OperatorStack, (double)functionResult);
+                i = closeParenIndex;            // resume scanning after the function call's ")"
+                continue;
+            }
             else if (Double.TryParse(token, out n)) // Try to convert token into double
             {
-                if (ValueStack.Count == 0)
-                {
-                    ValueStack.Push(n);
-                    continue;
-                }
-                if (OperatorStack.Peek() == "*" || OperatorStack.Peek() == "/")
-                {
-                    ValueStack.Push(n);         // Since I am using a helper method, push n into stack to pop it twice
-                    DividedByZero = Calculate(ValueStack, OperatorStack.Pop());
-                    continue;
-                }
-                else
-                {
-                    ValueStack.Push(n);         // Push token into the stack
-                }
+                DividedByZero = PushOperand(ValueStack, OperatorStack, n);
+                continue;
             }
             else if (IsOperator(token))                  // Check if token is an operator
             {
@@ -533,11 +611,11 @@ public class Formula
                     }
                 }
             }
-            else 
+            else
             {
                 try
                 {
-                    ValueStack.Push(lookup(token));     //Error should be thrown here if token is not valid}
+                    DividedByZero = PushOperand(ValueStack, OperatorStack, lookup(token));
                 }
                 catch (ArgumentException)
                 {
@@ -550,8 +628,91 @@ public class Formula
         if (DividedByZero) { return new FormulaError("Divided by zero"); }
         if (OperatorStack.Count == 0) { return ValueStack.Pop(); }
         return ValueStack.Pop();
-       
+    }
 
+    /// <summary>
+    ///   <para>
+    ///     Pushes a newly-computed operand (from a number literal, a variable lookup, or a
+    ///     function call's result) onto the value stack. Shared by all three so they get
+    ///     identical precedence handling: if the operator stack's top is "*" or "/", that
+    ///     operation is resolved immediately, exactly like the number-literal case always did.
+    ///   </para>
+    ///   <remarks>
+    ///     Before this was unified, only number literals got this immediate-resolution
+    ///     treatment; variables and (once added) function calls did not, which silently broke
+    ///     precedence for formulas like "A1*A2+A3".
+    ///   </remarks>
+    /// </summary>
+    /// <returns> True if this resolved a division by zero, false otherwise. </returns>
+    private bool PushOperand(Stack<double> valueStack, Stack<string> operatorStack, double value)
+    {
+        valueStack.Push(value);
+        if (operatorStack.Count > 0 && (operatorStack.Peek() == "*" || operatorStack.Peek() == "/"))
+        {
+            return Calculate(valueStack, operatorStack.Pop());
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///   <para>
+    ///     Evaluates a function call whose name token is tokens[functionNameIndex] (immediately
+    ///     followed by "(", with a flat, comma-separated list of range/cell arguments -- all
+    ///     guaranteed by the constructor's grammar validation, so no nested parentheses can occur
+    ///     before the matching close paren).
+    ///   </para>
+    /// </summary>
+    /// <param name="functionName"> The (already normalized) function name token, e.g. "SUM". </param>
+    /// <param name="argsStartIndex"> The index of the first argument token, right after "(". </param>
+    /// <param name="closeParenIndex"> Set to the index of this call's matching ")". </param>
+    /// <param name="lookup"> The same lookup delegate passed to Evaluate. </param>
+    /// <returns> Either a double result or a FormulaError. </returns>
+    private object EvaluateFunctionCall(string functionName, int argsStartIndex, out int closeParenIndex, Lookup lookup)
+    {
+        List<double> values = new List<double>();
+        int j = argsStartIndex;
+        while (tokens[j] != ")")
+        {
+            if (tokens[j] != ",")
+            {
+                string argToken = tokens[j];
+                try
+                {
+                    if (IsRange(argToken))
+                    {
+                        string[] corners = argToken.Split(':');
+                        foreach (string cell in ExpandRange(corners[0], corners[1]))
+                        {
+                            values.Add(lookup(cell));
+                        }
+                    }
+                    else
+                    {
+                        values.Add(lookup(argToken));
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    closeParenIndex = j;
+                    return new FormulaError("Invalid Token");
+                }
+            }
+
+            j++;
+        }
+
+        closeParenIndex = j;
+
+        return functionName switch
+        {
+            "SUM" => values.Sum(),
+            "AVERAGE" => values.Average(),
+            "MIN" => values.Min(),
+            "MAX" => values.Max(),
+            "COUNT" => (double)values.Count,
+            _ => throw new InvalidOperationException("Unreachable: unrecognized function name"),
+        };
     }
 
     /// <summary>

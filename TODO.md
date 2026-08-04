@@ -2,17 +2,6 @@
 
 Lightweight tracker, not a spec. Check things off as they land.
 
-## Now: Range references + aggregate functions
-
-- [x] Tokenizer: recognize range syntax (`A1:B3`) (`Formula.GetTokens`, 16 unit tests)
-- [x] Helper: expand a range into the list of cell names it covers (`Formula.ExpandRange`, 10 unit tests)
-- [x] Tokenizer: recognize function-name (`SUM`/`AVERAGE`/`MIN`/`MAX`/`COUNT`) and `,` tokens (`Formula.GetTokens`, 17 unit tests)
-- [ ] Grammar rules: constructor accepts/rejects full function calls -- `FUNCNAME "(" arg ("," arg)* ")"` where `arg := range | cell` (no bare numbers, no nested calls)
-- [ ] `GetVariables()`: include every cell referenced via a range/function arg
-- [ ] `Evaluate()`: compute function calls over the expanded arguments
-- [ ] `ToString()`: canonical form for ranges + function calls
-- [ ] Spreadsheet-level test: `=SUM(A1:A3)` recalculates correctly; circular deps through a range are still caught
-
 ## Backlog (basic spreadsheet functionality)
 
 - [ ] In-cell error display (`#DIV/0!`, `#REF!`, `#VALUE!`) instead of popup-only
@@ -22,7 +11,9 @@ Lightweight tracker, not a spec. Check things off as they land.
 - [ ] Undo / redo
 - [ ] Configurable grid size (currently hardcoded 50 rows x 26 cols)
 - [ ] Autosave (e.g. localStorage) so closing the tab doesn't lose work
+- [ ] Pre-existing gap: `new Formula("A1B2")` doesn't throw -- two operands with no operator between them aren't rejected (Rule 8 only tracks numeric literals via `PreviousIsNumber`, never variables). Found while building function-call grammar rules; unrelated to that work, not fixed yet.
 
 ## Done
 
 - [x] Stripped proprietary CS3500 grading test files from repo + git history
+- [x] Range references + aggregate functions (`SUM`/`AVERAGE`/`MIN`/`MAX`/`COUNT`): tokenizing, `ExpandRange`, grammar rules, `GetVariables()`, `Evaluate()`, `ToString()`, Spreadsheet-level recalculation + circular-dependency tests. 182 tests passing across the solution. Also fixed a pre-existing precedence bug (`A1*A2+A3` gave 14 instead of 10) found along the way.

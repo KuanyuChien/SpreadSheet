@@ -20,13 +20,18 @@ See [TODO.md](TODO.md) for the current work queue.
 
 ## Status
 
-Builds cleanly on .NET 8 (`dotnet build Spreadsheet/Spreadsheet.sln`).
-Currently supported: numbers, strings, and formulas with `+ - * /` and
-single-cell references in each cell. Range syntax (`A1:B3`) is now
-recognized by the tokenizer and can be expanded to its cell list
-(`Formula.ExpandRange`), but ranges aren't usable in a real formula yet —
-that needs function-call syntax (`SUM(...)`, etc.), which is next on the
-TODO.
+Builds cleanly on .NET 8 (`dotnet build Spreadsheet/Spreadsheet.sln`). 182
+tests passing across the solution.
+
+Formulas support numbers, strings, `+ - * /`, single-cell references, range
+references (`A1:B3`, including rectangles and multi-letter columns), and the
+aggregate functions `SUM`/`AVERAGE`/`MIN`/`MAX`/`COUNT` with comma-separated
+range/cell arguments (e.g. `=A1+3+AVERAGE(A2,A3)`, `=SUM(A1:A3,B5)`).
+Function calls compose with surrounding arithmetic and with each other, and
+correctly participate in dependency tracking/recalculation and
+circular-reference detection at the Spreadsheet level. Not supported:
+function arguments that are themselves numbers or nested function calls
+(kept out of scope to keep the grammar simple — see TODO for what's next).
 
 ## Running it
 
